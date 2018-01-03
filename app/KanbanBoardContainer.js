@@ -3,6 +3,7 @@ import KanbanBoard from './KanbanBoard';
 import 'whatwg-fetch';
 import 'babel-polyfill';
 import update from 'react-addons-update';
+import {throttle} from './snack-shopp/utils';
 
 const API_URL = 'http://kanbanapi.pro-react.com';
 const API_HEADERS = {
@@ -16,6 +17,11 @@ class KanbanBoardContainer extends Component {
         this.state={
             cards: [],
         };
+
+        // only call updateCardStatus when arguments change
+        this.updateCardStatus = throttle(this.updateCardStatus.bind(this));
+        // call updateCardPosition at max every 500ms (or when arguments change)
+        this.updateCardPosition = throttle(this.updateCardPosition.bind(this));
     }
 
     componentDidMount() {
@@ -150,6 +156,34 @@ class KanbanBoardContainer extends Component {
         }
     }
 
+    persistCardDrag(cardId, status) {
+        let cardIndex = this.state.cards.findIndex((card) => card.id === cardId);
+        let card = this.state.cards[cardIndex];
+
+        fetch(`${API_URL}/cards/${cardId}`, {
+            method: 'put',
+            headers: API_HEADERS,
+            body: JSON.stringify({
+                status: card.status,
+                row_order_position: cardIndex
+            })
+        })
+            .then((res) => {
+                if(!res.ok)
+                    throw new Error("Server respond wasn´t OK");
+            })
+            .catch((e) => {
+                console.log("Fetch error: ", e);
+                this.setState(update(this.state, {
+                    cards: {
+                        [cardIndex]: {
+                            status: {$set: status}
+                        }
+                    }
+                }));
+            });
+    }
+
     render() {
         fetch(API_URL + '/cards', {headers: API_HEADERS})
             .then((res) => res.json())
@@ -164,8 +198,9 @@ class KanbanBoardContainer extends Component {
                                 delete: this.deleteTask.bind(this),
                                 add: this.addTask.bind(this) }}
                             cardCallbacks={{
-                                updateStatus: this.updateCardStatus.bind(this),
-                                updatePosition: this.updateCardPosition.bind(this)
+                                updateStatus: this.updateCardStatus,
+                                updatePosition: this.updateCardPosition,
+                                persistCardDrag: this.persistCardDrag.bind(this)
                             }}/>
     }
 }
