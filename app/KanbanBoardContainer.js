@@ -184,24 +184,81 @@ class KanbanBoardContainer extends Component {
             });
     }
 
-    render() {
-        fetch(API_URL + '/cards', {headers: API_HEADERS})
-            .then((res) => res.json())
-            .then((data) => this.setState({cards: data}))
-            .catch((e) => {
-               console.log('Error fetching and parsing data', e);
-            });
+    addCard(card) {
+        let prevState = this.state;
 
-        return <KanbanBoard cards={this.state.cards}
-                            taskCallbacks={{
-                                toggle: this.toggleTask.bind(this),
-                                delete: this.deleteTask.bind(this),
-                                add: this.addTask.bind(this) }}
-                            cardCallbacks={{
-                                updateStatus: this.updateCardStatus,
-                                updatePosition: this.updateCardPosition,
-                                persistCardDrag: this.persistCardDrag.bind(this)
-                            }}/>
+        if(card.id === null){
+            card = Object.assign({}, card, {id: Date.now()});
+        }
+
+        let nextState = update(this.state.cards, { $push: [card] });
+        this.setState({cards: nextState});
+
+        fetch(`${API_URL}/cards`, {
+            method: 'post',
+            headers: API_HEADERS,
+            body: JSON.stringify(card)
+        })
+            .then((res) => {
+                if(res.ok) {
+                    return res.json();
+                } else {
+                    throw new Error("Server response wan't ok");
+                }
+            })
+            .then((data) => {
+                card.id = data.id;
+                this.setState({ cards: data });
+            })
+            .catch((e) => {
+                this.setState(prevState);
+            });
+    }
+
+    updateCard(card){
+        let prevState = this.state;
+        let cardIndex = this.state.cards.findIndex((c) => c.id === card.id);
+
+        let nextState = update(this.state.cards, {
+            [cardIndex]: {  $set: card }
+        });
+
+        this.setState({cards: nextState});
+
+        fetch(`${API_URL}/card/${card.id}`, {
+            method: 'put',
+            headers: API_HEADERS,
+            body: JSON.stringify(card)
+        })
+            .then((res) => {
+                if(!res.ok) {
+                    throw new Error("Server response wan't ok");
+                }
+            })
+            .catch((e) => {
+                console.error("Fetch error:", e);
+                this.setState(prevState);
+            });
+    }
+
+    render() {
+        let kanbanBoard = this.props.children && React.cloneElement(this.props.children, {
+            cards: this.state.cards,
+            taskCallbacks: {
+                toggle: this.toggleTask.bind(this),
+                delete: this.deleteTask.bind(this),
+                add: this.addTask.bind(this)
+            },
+            cardCallbacks: {
+                updateStatus: this.updateCardStatus,
+                updatePosition: this.updateCardPosition,
+                persistCardDrag: this.persistCardDrag.bind(this),
+                addCard: this.addCard.bind(this),
+                updateCard: this.updateCard.bind(this)
+            }
+        });
+
+        return kanbanBoard;
     }
 }
 
